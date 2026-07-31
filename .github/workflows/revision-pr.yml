@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────
+#  FASE 4 — Agente de IA REAL evaluando el PR
+# ─────────────────────────────────────────────────────────────
+# Descarga el repo, instala dependencias (openai), obtiene el diff
+# del PR y ejecuta el agente, que compara la descripción del PR
+# contra el diff y devuelve el veredicto en JSON.
+#
+# Nota: 'GH_TOKEN', 'GITHUB_STEP_SUMMARY', 'GITHUB_REPOSITORY' y
+# 'github.token' son nombres FIJOS de GitHub/gh y no se traducen.
+
+name: Revisión de PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+  # En tu oficina (GitHub Models), añadirías aquí:  models: read
+
+jobs:
+  revisar:
+    name: Revisar PR
+    runs-on: ubuntu-latest
+
+    env:
+      PR_REPOSITORIO: ${{ github.repository }}
+      PR_NUMERO: ${{ github.event.pull_request.number }}
+      PR_TITULO: ${{ github.event.pull_request.title }}
+      PR_DESCRIPCION: ${{ github.event.pull_request.body }}
+      PR_AUTOR: ${{ github.event.pull_request.user.login }}
+      PR_ADICIONES: ${{ github.event.pull_request.additions }}
+      PR_ELIMINACIONES: ${{ github.event.pull_request.deletions }}
+      PR_ARCHIVOS_CAMBIADOS: ${{ github.event.pull_request.changed_files }}
+      ARCHIVO_DIFF: pr.diff
+      ARCHIVO_LISTA: archivos_cambiados.txt
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Obtener diff y archivos cambiados
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr diff "$PR_NUMERO" --repo "$PR_REPOSITORIO" --name-only | tee "$ARCHIVO_LISTA"
+          gh pr diff "$PR_NUMERO" --repo "$PR_REPOSITORIO" > "$ARCHIVO_DIFF"
+          echo "Diff obtenido: $(wc -l < "$ARCHIVO_DIFF") líneas."
+
+      - name: Ejecutar agente de IA y generar veredicto
+        env:
+          # Hoy: tu clave de OpenAI (guardada como secret IA_CLAVE_API).
+          IA_CLAVE_API: ${{ secrets.IA_CLAVE_API }}
+          IA_MODELO: gpt-4o-mini
+          # IA_URL_BASE vacío = OpenAI. En tu oficina, para GitHub Models:
+          #   IA_URL_BASE:  https://models.github.ai/inference
+          #   IA_CLAVE_API: ${{ github.token }}   (con permiso models: read)
+          #   IA_MODELO:    openai/gpt-4o-mini
+        run: |
+          node agente/revisor.js | tee veredicto.json
+
+      - name: Volcar veredicto al resumen del job
+        run: |
+          VEREDICTO=$(jq -r '.veredicto' veredicto.json)
+          ALINEADO=$(jq -r '.alineado' veredicto.json)
+          MOTOR=$(jq -r '.metadatos.motor' veredicto.json)
+          MODELO=$(jq -r '.metadatos.modelo // "—"' veredicto.json)
+          RESUMEN=$(jq -r '.resumen' veredicto.json)
+          case "$VEREDICTO" in
+            aprobado)           ICONO="✅" ;;
+            cambios_requeridos) ICONO="❌" ;;
+            *)                  ICONO="💬" ;;
+          esac
+          {
+            echo "## 🤖 Revisión de PR — Fase 4: veredicto del agente de IA"
+            echo ""
+            echo "### $ICONO Veredicto: \`$VEREDICTO\` · alineado: \`$ALINEADO\`"
+            echo ""
+            echo "> $RESUMEN"
+            echo ""
+            echo "_Motor: \`$MOTOR\` · Modelo: \`$MODELO\`_"
+            echo ""
+            echo "### 🧾 Veredicto completo (JSON estándar)"
+            echo ""
+            echo '```json'
+            cat veredicto.json
+            echo '```'
+            echo ""
+            echo "<details><summary>Ver diff (primeras 300 líneas)</summary>"
+            echo ""
+            echo '```diff'
+            head -n 300 "$ARCHIVO_DIFF"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"

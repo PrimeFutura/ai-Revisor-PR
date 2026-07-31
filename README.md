@@ -22,7 +22,20 @@ formato JSON estándar**.
 - ✅ **Fase 0** completada.
 - ✅ **Fase 1** completada.
 - ✅ **Fase 2** completada.
-- 🔧 **Fase 3** en curso: script Node.js que devuelve un veredicto en JSON estándar (mock).
+- ✅ **Fase 3** completada.
+- 🔧 **Fase 4** en curso: el agente de IA compara descripción vs diff y emite el veredicto JSON.
+
+## Configuración del agente (variables de entorno)
+
+El agente es *provider-agnóstico* (endpoint compatible con OpenAI):
+
+| Variable | Descripción | Hoy | En GitHub Enterprise (Copilot / GitHub Models) |
+|---|---|---|---|
+| `IA_CLAVE_API` | Credencial | secret `IA_CLAVE_API` | `${{ github.token }}` con `models: read` |
+| `IA_URL_BASE` | Endpoint | *(vacío = OpenAI)* | `https://models.github.ai/inference` |
+| `IA_MODELO` | Modelo | `gpt-4o-mini` | `openai/gpt-4o-mini` |
+
+> Si no hay `IA_CLAVE_API`, el agente usa un motor **simulado** para no romper el flujo.
 
 ## Estructura
 
@@ -30,11 +43,11 @@ formato JSON estándar**.
 .
 ├── .github/
 │   └── workflows/
-│       └── pr-check.yml     # Workflow que se dispara en cada Pull Request
-├── agent/
-│   └── review.js            # Agente revisor: recibe datos del PR y devuelve JSON
+│       └── revision-pr.yml  # Workflow que se dispara en cada Pull Request
+├── agente/
+│   └── revisor.js           # Agente revisor: recibe datos del PR y devuelve JSON
 ├── src/
-│   └── greet.js             # Código de ejemplo para modificar en las ramas feature
+│   └── saludar.js           # Código de ejemplo para modificar en las ramas feature
 ├── package.json
 └── README.md
 ```

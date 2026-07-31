@@ -5,6 +5,11 @@ node_modules/
 *.log
 npm-debug.log*
 
+# Artefactos que genera el agente en tiempo de ejecución
+pr.diff
+archivos_cambiados.txt
+veredicto.json
+
 # Variables de entorno (nunca subir claves/API keys)
 .env
 .env.local

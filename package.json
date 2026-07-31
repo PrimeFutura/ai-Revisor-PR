@@ -4,7 +4,11 @@
   "description": "Laboratorio de GitHub Actions: agente de IA que revisa Pull Requests.",
   "type": "module",
   "scripts": {
-    "start": "node src/greet.js"
+    "iniciar": "node src/saludar.js",
+    "revisar": "node agente/revisor.js"
+  },
+  "dependencies": {
+    "openai": "^4"
   },
   "license": "MIT"
 }
