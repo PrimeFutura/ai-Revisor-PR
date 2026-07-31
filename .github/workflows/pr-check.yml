@@ -1,32 +1,26 @@
 # ─────────────────────────────────────────────────────────────
-#  FASE 1 — Leer y mostrar el CONTEXTO del Pull Request
+#  FASE 2 — Contexto del PR + obtener el DIFF y archivos cambiados
 # ─────────────────────────────────────────────────────────────
-# Aún sin lógica ni IA: el objetivo es acceder a los metadatos del
-# PR (título, descripción, autor, ramas, tamaño del cambio) y
-# dejarlos visibles en el log y en el resumen del job.
+# Sobre la Fase 1 añadimos la obtención del diff del PR usando la
+# CLI 'gh' (preinstalada en el runner). Guardamos el resultado en
+# archivos que en la Fase 3 alimentarán al script del agente.
 
 name: PR Check
 
 on:
   pull_request:
-    # 'edited' -> se re-ejecuta si cambian el título o la descripción.
-    # 'synchronize' -> se re-ejecuta al empujar nuevos commits al PR.
     types: [opened, synchronize, reopened, edited]
 
-# Principio de mínimo privilegio: por ahora solo necesitamos leer.
+# 'pull-requests: read' hace falta para que 'gh pr diff' consulte el PR.
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
-  context:
-    name: Leer contexto del PR
+  review:
+    name: Revisar PR
     runs-on: ubuntu-latest
 
-    # PATRÓN SEGURO: pasamos los datos del PR a variables de entorno.
-    # NUNCA insertes ${{ github.event.pull_request.title }} directamente
-    # dentro de un 'run:', porque el título/descripción los escribe un
-    # humano y podrían inyectar comandos en el shell (script injection).
-    # Al pasarlos por 'env', el shell los trata como texto plano.
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_TITLE: ${{ github.event.pull_request.title }}
@@ -39,6 +33,7 @@ jobs:
       PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
 
     steps:
+      # ── Contexto (Fase 1) ────────────────────────────────────
       - name: Mostrar contexto en el log
         run: |
           echo "PR #$PR_NUMBER — $PR_TITLE"
@@ -48,10 +43,27 @@ jobs:
           echo "----- Descripción -----"
           echo "${PR_BODY:-(sin descripción)}"
 
-      - name: Volcar contexto al resumen del job
+      # ── Diff (Fase 2) ────────────────────────────────────────
+      - name: Obtener diff y archivos cambiados
+        env:
+          # 'gh' necesita un token para hablar con la API. Usamos el
+          # token efímero que GitHub genera para este workflow.
+          GH_TOKEN: ${{ github.token }}
         run: |
+          echo "Lista de archivos cambiados:"
+          gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only | tee changed_files.txt
+
+          echo ""
+          echo "Guardando diff completo en pr.diff ..."
+          gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" > pr.diff
+          echo "Diff obtenido: $(wc -l < pr.diff) líneas."
+
+      # ── Resumen visible ──────────────────────────────────────
+      - name: Volcar todo al resumen del job
+        run: |
+          DIFF_LINES=$(wc -l < pr.diff)
           {
-            echo "## 🤖 PR Check — Fase 1: contexto del PR"
+            echo "## 🤖 PR Check — Fase 2: contexto + diff"
             echo ""
             echo "| Campo | Valor |"
             echo "|---|---|"
@@ -65,4 +77,20 @@ jobs:
             echo ""
             echo "### 📄 Descripción"
             echo "${PR_BODY:-_(sin descripción)_}"
+            echo ""
+            echo "### 📁 Archivos cambiados"
+            echo ""
+            echo '```'
+            cat changed_files.txt
+            echo '```'
+            echo ""
+            echo "### 🔀 Diff ($DIFF_LINES líneas)"
+            echo ""
+            echo "<details><summary>Ver diff (primeras 300 líneas)</summary>"
+            echo ""
+            echo '```diff'
+            head -n 300 pr.diff
+            echo '```'
+            echo ""
+            echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
