@@ -1,9 +1,9 @@
 # ─────────────────────────────────────────────────────────────
-#  FASE 2 — Contexto del PR + obtener el DIFF y archivos cambiados
+#  FASE 3 — Ejecutar el agente (MOCK) y publicar su veredicto JSON
 # ─────────────────────────────────────────────────────────────
-# Sobre la Fase 1 añadimos la obtención del diff del PR usando la
-# CLI 'gh' (preinstalada en el runner). Guardamos el resultado en
-# archivos que en la Fase 3 alimentarán al script del agente.
+# Sobre la Fase 2 (contexto + diff) añadimos: checkout del repo,
+# instalación de Node, ejecución de agent/review.js y volcado del
+# veredicto JSON al resumen del job. Todavía sin IA.
 
 name: PR Check
 
@@ -11,7 +11,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
 
-# 'pull-requests: read' hace falta para que 'gh pr diff' consulte el PR.
 permissions:
   contents: read
   pull-requests: read
@@ -22,74 +21,75 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      PR_REPO: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_TITLE: ${{ github.event.pull_request.title }}
       PR_BODY: ${{ github.event.pull_request.body }}
       PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-      PR_HEAD: ${{ github.head_ref }}
-      PR_BASE: ${{ github.base_ref }}
       PR_ADDITIONS: ${{ github.event.pull_request.additions }}
       PR_DELETIONS: ${{ github.event.pull_request.deletions }}
       PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+      DIFF_FILE: pr.diff
+      FILES_FILE: changed_files.txt
 
     steps:
-      # ── Contexto (Fase 1) ────────────────────────────────────
-      - name: Mostrar contexto en el log
-        run: |
-          echo "PR #$PR_NUMBER — $PR_TITLE"
-          echo "Autor        : $PR_AUTHOR"
-          echo "Rama         : $PR_HEAD -> $PR_BASE"
-          echo "Tamaño       : +$PR_ADDITIONS / -$PR_DELETIONS en $PR_CHANGED_FILES archivo(s)"
-          echo "----- Descripción -----"
-          echo "${PR_BODY:-(sin descripción)}"
+      # Necesario para disponer de agent/review.js en el runner.
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       # ── Diff (Fase 2) ────────────────────────────────────────
       - name: Obtener diff y archivos cambiados
         env:
-          # 'gh' necesita un token para hablar con la API. Usamos el
-          # token efímero que GitHub genera para este workflow.
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Lista de archivos cambiados:"
-          gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only | tee changed_files.txt
+          gh pr diff "$PR_NUMBER" --repo "$PR_REPO" --name-only | tee "$FILES_FILE"
+          gh pr diff "$PR_NUMBER" --repo "$PR_REPO" > "$DIFF_FILE"
+          echo "Diff obtenido: $(wc -l < "$DIFF_FILE") líneas."
 
-          echo ""
-          echo "Guardando diff completo en pr.diff ..."
-          gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" > pr.diff
-          echo "Diff obtenido: $(wc -l < pr.diff) líneas."
+      # ── Agente (Fase 3) ──────────────────────────────────────
+      - name: Ejecutar agente y generar veredicto
+        run: |
+          node agent/review.js | tee verdict.json
 
       # ── Resumen visible ──────────────────────────────────────
-      - name: Volcar todo al resumen del job
+      - name: Volcar veredicto y contexto al resumen del job
         run: |
-          DIFF_LINES=$(wc -l < pr.diff)
+          VERDICT=$(jq -r '.verdict' verdict.json)
+          ALIGNED=$(jq -r '.aligned' verdict.json)
+          case "$VERDICT" in
+            approve)         ICON="✅" ;;
+            request_changes) ICON="❌" ;;
+            *)               ICON="💬" ;;
+          esac
           {
-            echo "## 🤖 PR Check — Fase 2: contexto + diff"
+            echo "## 🤖 PR Check — Fase 3: veredicto del agente (mock)"
+            echo ""
+            echo "### $ICON Veredicto: \`$VERDICT\` · alineado: \`$ALIGNED\`"
             echo ""
             echo "| Campo | Valor |"
             echo "|---|---|"
             echo "| PR | #$PR_NUMBER |"
             echo "| Autor | \`$PR_AUTHOR\` |"
-            echo "| Rama | \`$PR_HEAD\` → \`$PR_BASE\` |"
             echo "| Tamaño | +$PR_ADDITIONS / -$PR_DELETIONS · $PR_CHANGED_FILES archivo(s) |"
             echo ""
-            echo "### 📝 Título"
-            echo "$PR_TITLE"
-            echo ""
-            echo "### 📄 Descripción"
+            echo "### 📄 Descripción del PR"
             echo "${PR_BODY:-_(sin descripción)_}"
             echo ""
-            echo "### 📁 Archivos cambiados"
+            echo "### 🧾 Veredicto (JSON estándar)"
             echo ""
+            echo '```json'
+            cat verdict.json
             echo '```'
-            cat changed_files.txt
-            echo '```'
-            echo ""
-            echo "### 🔀 Diff ($DIFF_LINES líneas)"
             echo ""
             echo "<details><summary>Ver diff (primeras 300 líneas)</summary>"
             echo ""
             echo '```diff'
-            head -n 300 pr.diff
+            head -n 300 "$DIFF_FILE"
             echo '```'
             echo ""
             echo "</details>"

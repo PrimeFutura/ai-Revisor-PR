@@ -21,7 +21,8 @@ formato JSON estándar**.
 
 - ✅ **Fase 0** completada.
 - ✅ **Fase 1** completada.
-- 🔧 **Fase 2** en curso: el workflow obtiene el diff y los archivos cambiados.
+- ✅ **Fase 2** completada.
+- 🔧 **Fase 3** en curso: script Node.js que devuelve un veredicto en JSON estándar (mock).
 
 ## Estructura
 
@@ -30,6 +31,8 @@ formato JSON estándar**.
 ├── .github/
 │   └── workflows/
 │       └── pr-check.yml     # Workflow que se dispara en cada Pull Request
+├── agent/
+│   └── review.js            # Agente revisor: recibe datos del PR y devuelve JSON
 ├── src/
 │   └── greet.js             # Código de ejemplo para modificar en las ramas feature
 ├── package.json
