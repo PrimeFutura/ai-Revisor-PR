@@ -20,7 +20,8 @@ formato JSON estándar**.
 ## Estado actual
 
 - ✅ **Fase 0** completada.
-- 🔧 **Fase 1** en curso: el workflow lee y muestra el contexto del PR.
+- ✅ **Fase 1** completada.
+- 🔧 **Fase 2** en curso: el workflow obtiene el diff y los archivos cambiados.
 
 ## Estructura
 
