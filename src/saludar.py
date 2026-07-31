@@ -3,7 +3,7 @@
 
 
 def saludar(nombre="equipo"):
-    return f"Hey, {nombre}!"
+    return f"Hola a todos!, {nombre}!"
 
 
 # Ejecutable directo: `python3 src/saludar.py`
