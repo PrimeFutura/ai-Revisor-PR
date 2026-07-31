@@ -4,8 +4,8 @@
   "description": "Laboratorio de GitHub Actions: agente de IA que revisa Pull Requests.",
   "type": "module",
   "scripts": {
-    "start": "node src/greet.js",
-    "review": "node agent/review.js"
+    "iniciar": "node src/saludar.js",
+    "revisar": "node agente/revisor.js"
   },
   "dependencies": {
     "openai": "^4"

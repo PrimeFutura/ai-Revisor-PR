@@ -31,11 +31,11 @@ El agente es *provider-agnóstico* (endpoint compatible con OpenAI):
 
 | Variable | Descripción | Hoy | En GitHub Enterprise (Copilot / GitHub Models) |
 |---|---|---|---|
-| `LLM_API_KEY` | Credencial | `OPENAI_API_KEY` (secret) | `${{ github.token }}` con `models: read` |
-| `LLM_BASE_URL` | Endpoint | *(vacío = OpenAI)* | `https://models.github.ai/inference` |
-| `LLM_MODEL` | Modelo | `gpt-4o-mini` | `openai/gpt-4o-mini` |
+| `IA_CLAVE_API` | Credencial | secret `IA_CLAVE_API` | `${{ github.token }}` con `models: read` |
+| `IA_URL_BASE` | Endpoint | *(vacío = OpenAI)* | `https://models.github.ai/inference` |
+| `IA_MODELO` | Modelo | `gpt-4o-mini` | `openai/gpt-4o-mini` |
 
-> Si no hay `LLM_API_KEY`, el agente usa un motor **mock** para no romper el flujo.
+> Si no hay `IA_CLAVE_API`, el agente usa un motor **simulado** para no romper el flujo.
 
 ## Estructura
 
@@ -43,11 +43,11 @@ El agente es *provider-agnóstico* (endpoint compatible con OpenAI):
 .
 ├── .github/
 │   └── workflows/
-│       └── pr-check.yml     # Workflow que se dispara en cada Pull Request
-├── agent/
-│   └── review.js            # Agente revisor: recibe datos del PR y devuelve JSON
+│       └── revision-pr.yml  # Workflow que se dispara en cada Pull Request
+├── agente/
+│   └── revisor.js           # Agente revisor: recibe datos del PR y devuelve JSON
 ├── src/
-│   └── greet.js             # Código de ejemplo para modificar en las ramas feature
+│   └── saludar.js           # Código de ejemplo para modificar en las ramas feature
 ├── package.json
 └── README.md
 ```
