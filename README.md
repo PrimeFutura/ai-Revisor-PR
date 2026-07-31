@@ -23,7 +23,8 @@ formato JSON estándar**.
 - ✅ **Fase 1** completada.
 - ✅ **Fase 2** completada.
 - ✅ **Fase 3** completada.
-- 🔧 **Fase 4** en curso: el agente de IA compara descripción vs diff y emite el veredicto JSON.
+- ✅ **Fase 4** completada.
+- 🔧 **Fase 5** en curso: el agente comenta en el PR y el check puede bloquear el merge.
 
 ## Configuración del agente (variables de entorno)
 

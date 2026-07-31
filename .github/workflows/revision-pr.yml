@@ -1,9 +1,10 @@
 # ─────────────────────────────────────────────────────────────
-#  FASE 4 — Agente de IA REAL evaluando el PR
+#  FASE 5 — Comentar en el PR y poder BLOQUEAR el merge
 # ─────────────────────────────────────────────────────────────
-# Descarga el repo, instala dependencias (openai), obtiene el diff
-# del PR y ejecuta el agente, que compara la descripción del PR
-# contra el diff y devuelve el veredicto en JSON.
+# Sobre la Fase 4 añadimos: publicar (y actualizar) un comentario
+# con el veredicto en el propio PR, y hacer que el check FALLE
+# cuando el veredicto sea 'cambios_requeridos' (para que, junto a
+# una regla de protección de rama, impida fusionar).
 #
 # Nota: 'GH_TOKEN', 'GITHUB_STEP_SUMMARY', 'GITHUB_REPOSITORY' y
 # 'github.token' son nombres FIJOS de GitHub/gh y no se traducen.
@@ -16,7 +17,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write # ahora ESCRIBIMOS: hace falta para comentar
   # En tu oficina (GitHub Models), añadirías aquí:  models: read
 
 jobs:
@@ -58,7 +59,6 @@ jobs:
 
       - name: Ejecutar agente de IA y generar veredicto
         env:
-          # Hoy: tu clave de OpenAI (guardada como secret IA_CLAVE_API).
           IA_CLAVE_API: ${{ secrets.IA_CLAVE_API }}
           IA_MODELO: gpt-4o-mini
           # IA_URL_BASE vacío = OpenAI. En tu oficina, para GitHub Models:
@@ -68,38 +68,67 @@ jobs:
         run: |
           node agente/revisor.js | tee veredicto.json
 
-      - name: Volcar veredicto al resumen del job
+      - name: Construir el comentario
         run: |
           VEREDICTO=$(jq -r '.veredicto' veredicto.json)
-          ALINEADO=$(jq -r '.alineado' veredicto.json)
+          RESUMEN=$(jq -r '.resumen' veredicto.json)
           MOTOR=$(jq -r '.metadatos.motor' veredicto.json)
           MODELO=$(jq -r '.metadatos.modelo // "—"' veredicto.json)
-          RESUMEN=$(jq -r '.resumen' veredicto.json)
+          VERSION=$(jq -r '.version_esquema' veredicto.json)
+          NUM=$(jq -r '.hallazgos | length' veredicto.json)
           case "$VEREDICTO" in
             aprobado)           ICONO="✅" ;;
             cambios_requeridos) ICONO="❌" ;;
             *)                  ICONO="💬" ;;
           esac
           {
-            echo "## 🤖 Revisión de PR — Fase 4: veredicto del agente de IA"
+            # Marca oculta para reconocer NUESTRO comentario y actualizarlo.
+            echo "<!-- revisor-ia -->"
+            echo "## 🤖 Revisión automática del PR"
             echo ""
-            echo "### $ICONO Veredicto: \`$VEREDICTO\` · alineado: \`$ALINEADO\`"
+            echo "### $ICONO Veredicto: \`$VEREDICTO\`"
             echo ""
             echo "> $RESUMEN"
             echo ""
-            echo "_Motor: \`$MOTOR\` · Modelo: \`$MODELO\`_"
+            if [ "$NUM" -gt 0 ]; then
+              echo "**Hallazgos ($NUM):**"
+              jq -r '.hallazgos[] | "- **\(.severidad | ascii_upcase)** · `\(.tipo)`\(if (.archivos|length)>0 then " (" + (.archivos|join(", ")) + ")" else "" end): \(.mensaje)"' veredicto.json
+              echo ""
+            fi
+            echo "<sub>Motor: \`$MOTOR\` · Modelo: \`$MODELO\` · Contrato JSON v$VERSION · Actualizado automáticamente</sub>"
+          } > comentario.md
+          echo "----- comentario.md -----"
+          cat comentario.md
+
+      - name: Publicar o actualizar el comentario en el PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 'sticky': intenta EDITAR el último comentario del bot; si no
+          # existe (primera vez), CREA uno nuevo. Así no se llena de spam.
+          gh pr comment "$PR_NUMERO" --repo "$PR_REPOSITORIO" --body-file comentario.md --edit-last \
+            || gh pr comment "$PR_NUMERO" --repo "$PR_REPOSITORIO" --body-file comentario.md
+
+      - name: Volcar veredicto al resumen del job
+        run: |
+          VEREDICTO=$(jq -r '.veredicto' veredicto.json)
+          {
+            echo "## 🤖 Revisión de PR — Fase 5"
             echo ""
-            echo "### 🧾 Veredicto completo (JSON estándar)"
+            echo "Veredicto: \`$VEREDICTO\`. El comentario fue publicado en el PR."
             echo ""
             echo '```json'
             cat veredicto.json
             echo '```'
-            echo ""
-            echo "<details><summary>Ver diff (primeras 300 líneas)</summary>"
-            echo ""
-            echo '```diff'
-            head -n 300 "$ARCHIVO_DIFF"
-            echo '```'
-            echo ""
-            echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # ⚠️ ÚLTIMO paso: si el veredicto pide cambios, el check FALLA.
+      # (El comentario ya se publicó en el paso anterior.)
+      - name: Aplicar veredicto (puede bloquear el merge)
+        run: |
+          VEREDICTO=$(jq -r '.veredicto' veredicto.json)
+          if [ "$VEREDICTO" = "cambios_requeridos" ]; then
+            echo "::error::El agente solicita cambios (veredicto: cambios_requeridos). Se bloquea el merge."
+            exit 1
+          fi
+          echo "Veredicto '$VEREDICTO': no bloquea el merge. ✅"
