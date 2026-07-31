@@ -19,7 +19,8 @@ formato JSON estándar**.
 
 ## Estado actual
 
-- ✅ **Fase 0** en curso.
+- ✅ **Fase 0** completada.
+- 🔧 **Fase 1** en curso: el workflow lee y muestra el contexto del PR.
 
 ## Estructura
 

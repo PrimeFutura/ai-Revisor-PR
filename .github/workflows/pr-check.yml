@@ -1,42 +1,68 @@
 # ─────────────────────────────────────────────────────────────
-#  FASE 0 — Dejar traza de que el Action se ejecutó en un PR
+#  FASE 1 — Leer y mostrar el CONTEXTO del Pull Request
 # ─────────────────────────────────────────────────────────────
-# Este workflow no tiene lógica todavía: solo demuestra que, al
-# abrir/actualizar un Pull Request, GitHub Actions se dispara y
-# deja constancia (en el log y en el resumen del job).
+# Aún sin lógica ni IA: el objetivo es acceder a los metadatos del
+# PR (título, descripción, autor, ramas, tamaño del cambio) y
+# dejarlos visibles en el log y en el resumen del job.
 
 name: PR Check
 
-# ¿CUÁNDO se ejecuta? -> en eventos de Pull Request contra cualquier rama.
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    # 'edited' -> se re-ejecuta si cambian el título o la descripción.
+    # 'synchronize' -> se re-ejecuta al empujar nuevos commits al PR.
+    types: [opened, synchronize, reopened, edited]
+
+# Principio de mínimo privilegio: por ahora solo necesitamos leer.
+permissions:
+  contents: read
 
 jobs:
-  trace:
-    name: Dejar traza
+  context:
+    name: Leer contexto del PR
     runs-on: ubuntu-latest
-    steps:
-      # 1) Traza en el LOG del job (pestaña Actions -> este job -> logs)
-      - name: Traza en el log
-        run: |
-          echo "✅ El workflow 'PR Check' se ejecutó."
-          echo "Evento         : ${{ github.event_name }}"
-          echo "Repositorio    : ${{ github.repository }}"
-          echo "PR número      : #${{ github.event.pull_request.number }}"
-          echo "Rama origen    : ${{ github.head_ref }}"
-          echo "Rama destino   : ${{ github.base_ref }}"
-          echo "Commit (SHA)   : ${{ github.sha }}"
 
-      # 2) Traza VISIBLE en el resumen del job (más fácil de encontrar)
-      - name: Traza en el resumen del job
+    # PATRÓN SEGURO: pasamos los datos del PR a variables de entorno.
+    # NUNCA insertes ${{ github.event.pull_request.title }} directamente
+    # dentro de un 'run:', porque el título/descripción los escribe un
+    # humano y podrían inyectar comandos en el shell (script injection).
+    # Al pasarlos por 'env', el shell los trata como texto plano.
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_BODY: ${{ github.event.pull_request.body }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      PR_HEAD: ${{ github.head_ref }}
+      PR_BASE: ${{ github.base_ref }}
+      PR_ADDITIONS: ${{ github.event.pull_request.additions }}
+      PR_DELETIONS: ${{ github.event.pull_request.deletions }}
+      PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+
+    steps:
+      - name: Mostrar contexto en el log
+        run: |
+          echo "PR #$PR_NUMBER — $PR_TITLE"
+          echo "Autor        : $PR_AUTHOR"
+          echo "Rama         : $PR_HEAD -> $PR_BASE"
+          echo "Tamaño       : +$PR_ADDITIONS / -$PR_DELETIONS en $PR_CHANGED_FILES archivo(s)"
+          echo "----- Descripción -----"
+          echo "${PR_BODY:-(sin descripción)}"
+
+      - name: Volcar contexto al resumen del job
         run: |
           {
-            echo "## 🤖 PR Check — Fase 0"
+            echo "## 🤖 PR Check — Fase 1: contexto del PR"
             echo ""
-            echo "El Action **pasó por aquí**. ✅"
+            echo "| Campo | Valor |"
+            echo "|---|---|"
+            echo "| PR | #$PR_NUMBER |"
+            echo "| Autor | \`$PR_AUTHOR\` |"
+            echo "| Rama | \`$PR_HEAD\` → \`$PR_BASE\` |"
+            echo "| Tamaño | +$PR_ADDITIONS / -$PR_DELETIONS · $PR_CHANGED_FILES archivo(s) |"
             echo ""
-            echo "- **Evento:** \`${{ github.event_name }}\`"
-            echo "- **PR:** #${{ github.event.pull_request.number }}"
-            echo "- **Rama:** \`${{ github.head_ref }}\` → \`${{ github.base_ref }}\`"
+            echo "### 📝 Título"
+            echo "$PR_TITLE"
+            echo ""
+            echo "### 📄 Descripción"
+            echo "${PR_BODY:-_(sin descripción)_}"
           } >> "$GITHUB_STEP_SUMMARY"
