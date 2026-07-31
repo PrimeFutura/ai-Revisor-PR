@@ -22,7 +22,20 @@ formato JSON estándar**.
 - ✅ **Fase 0** completada.
 - ✅ **Fase 1** completada.
 - ✅ **Fase 2** completada.
-- 🔧 **Fase 3** en curso: script Node.js que devuelve un veredicto en JSON estándar (mock).
+- ✅ **Fase 3** completada.
+- 🔧 **Fase 4** en curso: el agente de IA compara descripción vs diff y emite el veredicto JSON.
+
+## Configuración del agente (variables de entorno)
+
+El agente es *provider-agnóstico* (endpoint compatible con OpenAI):
+
+| Variable | Descripción | Hoy | En GitHub Enterprise (Copilot / GitHub Models) |
+|---|---|---|---|
+| `LLM_API_KEY` | Credencial | `OPENAI_API_KEY` (secret) | `${{ github.token }}` con `models: read` |
+| `LLM_BASE_URL` | Endpoint | *(vacío = OpenAI)* | `https://models.github.ai/inference` |
+| `LLM_MODEL` | Modelo | `gpt-4o-mini` | `openai/gpt-4o-mini` |
+
+> Si no hay `LLM_API_KEY`, el agente usa un motor **mock** para no romper el flujo.
 
 ## Estructura
 

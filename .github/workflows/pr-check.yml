@@ -1,9 +1,9 @@
 # ─────────────────────────────────────────────────────────────
-#  FASE 3 — Ejecutar el agente (MOCK) y publicar su veredicto JSON
+#  FASE 4 — Agente de IA REAL evaluando el PR
 # ─────────────────────────────────────────────────────────────
-# Sobre la Fase 2 (contexto + diff) añadimos: checkout del repo,
-# instalación de Node, ejecución de agent/review.js y volcado del
-# veredicto JSON al resumen del job. Todavía sin IA.
+# Sobre la Fase 3 añadimos: instalación de dependencias (openai) y
+# el paso de la credencial (secret) al agente. El agente compara la
+# descripción del PR contra el diff y devuelve el veredicto JSON.
 
 name: PR Check
 
@@ -14,6 +14,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  # En tu oficina (GitHub Models), añadirías aquí:  models: read
 
 jobs:
   review:
@@ -33,7 +34,6 @@ jobs:
       FILES_FILE: changed_files.txt
 
     steps:
-      # Necesario para disponer de agent/review.js en el runner.
       - name: Checkout del repositorio
         uses: actions/checkout@v4
 
@@ -42,7 +42,9 @@ jobs:
         with:
           node-version: 20
 
-      # ── Diff (Fase 2) ────────────────────────────────────────
+      - name: Instalar dependencias
+        run: npm install
+
       - name: Obtener diff y archivos cambiados
         env:
           GH_TOKEN: ${{ github.token }}
@@ -51,36 +53,40 @@ jobs:
           gh pr diff "$PR_NUMBER" --repo "$PR_REPO" > "$DIFF_FILE"
           echo "Diff obtenido: $(wc -l < "$DIFF_FILE") líneas."
 
-      # ── Agente (Fase 3) ──────────────────────────────────────
-      - name: Ejecutar agente y generar veredicto
+      - name: Ejecutar agente de IA y generar veredicto
+        env:
+          # Hoy: tu API key de OpenAI (guardada como secret).
+          LLM_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LLM_MODEL: gpt-4o-mini
+          # LLM_BASE_URL vacío = OpenAI. En tu oficina, para GitHub Models:
+          #   LLM_BASE_URL: https://models.github.ai/inference
+          #   LLM_API_KEY:  ${{ github.token }}   (con permiso models: read)
+          #   LLM_MODEL:    openai/gpt-4o-mini
         run: |
           node agent/review.js | tee verdict.json
 
-      # ── Resumen visible ──────────────────────────────────────
-      - name: Volcar veredicto y contexto al resumen del job
+      - name: Volcar veredicto al resumen del job
         run: |
           VERDICT=$(jq -r '.verdict' verdict.json)
           ALIGNED=$(jq -r '.aligned' verdict.json)
+          ENGINE=$(jq -r '.metadata.engine' verdict.json)
+          MODEL=$(jq -r '.metadata.model // "—"' verdict.json)
+          SUMMARY=$(jq -r '.summary' verdict.json)
           case "$VERDICT" in
             approve)         ICON="✅" ;;
             request_changes) ICON="❌" ;;
             *)               ICON="💬" ;;
           esac
           {
-            echo "## 🤖 PR Check — Fase 3: veredicto del agente (mock)"
+            echo "## 🤖 PR Check — Fase 4: veredicto del agente de IA"
             echo ""
             echo "### $ICON Veredicto: \`$VERDICT\` · alineado: \`$ALIGNED\`"
             echo ""
-            echo "| Campo | Valor |"
-            echo "|---|---|"
-            echo "| PR | #$PR_NUMBER |"
-            echo "| Autor | \`$PR_AUTHOR\` |"
-            echo "| Tamaño | +$PR_ADDITIONS / -$PR_DELETIONS · $PR_CHANGED_FILES archivo(s) |"
+            echo "> $SUMMARY"
             echo ""
-            echo "### 📄 Descripción del PR"
-            echo "${PR_BODY:-_(sin descripción)_}"
+            echo "_Motor: \`$ENGINE\` · Modelo: \`$MODEL\`_"
             echo ""
-            echo "### 🧾 Veredicto (JSON estándar)"
+            echo "### 🧾 Veredicto completo (JSON estándar)"
             echo ""
             echo '```json'
             cat verdict.json
