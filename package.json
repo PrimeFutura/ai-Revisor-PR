@@ -1,0 +1,10 @@
+{
+  "name": "ai-revisor-pr",
+  "version": "0.0.0",
+  "description": "Laboratorio de GitHub Actions: agente de IA que revisa Pull Requests.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/greet.js"
+  },
+  "license": "MIT"
+}
