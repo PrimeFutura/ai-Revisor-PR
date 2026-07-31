@@ -1,9 +1,11 @@
-# Dependencias
-node_modules/
+# Entornos / cachés de Python
+__pycache__/
+*.pyc
+.venv/
+venv/
 
 # Logs
 *.log
-npm-debug.log*
 
 # Artefactos que genera el agente en tiempo de ejecución
 pr.diff

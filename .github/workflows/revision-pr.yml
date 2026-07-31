@@ -39,15 +39,12 @@ jobs:
 
     steps:
       - name: Descargar el repositorio
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Configurar Node.js
-        uses: actions/setup-node@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
         with:
-          node-version: 20
-
-      - name: Instalar dependencias
-        run: npm install
+          python-version: "3.12"
 
       - name: Obtener diff y archivos cambiados
         env:
@@ -66,7 +63,7 @@ jobs:
           #   IA_CLAVE_API: ${{ github.token }}   (con permiso models: read)
           #   IA_MODELO:    openai/gpt-4o-mini
         run: |
-          node agente/revisor.js | tee veredicto.json
+          python3 agente/revisor.py | tee veredicto.json
 
       - name: Construir el comentario
         run: |
@@ -76,6 +73,9 @@ jobs:
           MODELO=$(jq -r '.metadatos.modelo // "—"' veredicto.json)
           VERSION=$(jq -r '.version_esquema' veredicto.json)
           NUM=$(jq -r '.hallazgos | length' veredicto.json)
+          COH_TITULO=$(jq -r '.coherencia.titulo' veredicto.json)
+          COH_DESC=$(jq -r '.coherencia.descripcion' veredicto.json)
+          icono_bool() { case "$1" in true) echo "✅" ;; false) echo "❌" ;; *) echo "❔" ;; esac; }
           case "$VEREDICTO" in
             aprobado)           ICONO="✅" ;;
             cambios_requeridos) ICONO="❌" ;;
@@ -87,6 +87,8 @@ jobs:
             echo "## 🤖 Revisión automática del PR"
             echo ""
             echo "### $ICONO Veredicto: \`$VEREDICTO\`"
+            echo ""
+            echo "**Coherencia por campo:** título $(icono_bool "$COH_TITULO") · descripción $(icono_bool "$COH_DESC")"
             echo ""
             echo "> $RESUMEN"
             echo ""
